@@ -22,9 +22,8 @@ c = @(eta) c_r - (c_r - c_t)*eta;
 ec = @(eta) c(eta) - c_1 - 0.25*c(eta);
 
 % GJ constants and function
-GJ_1 = 8500;
-GJ_2 = 7500;
-GJ = @(eta) (GJ_1 * (1 - 0.25*eta)) .* (eta < 0.5) + ...
-            (GJ_2 * (1- 0.2*eta)) .* (eta >=0.5);
+GJ1 = 8500;
+GJ2 = 7500;
+GJ = @(eta) 
 
 %% 
