@@ -76,6 +76,13 @@ def error(previous, new):
 '''
 Question a)
 '''
+
+# Max number of modes
+nmax = 5
+
+# Array to store dynamic pressures for each mode count
+qd = np.zeros(nmax)
+
 # Finding the first 5 modes (use integer mode numbers to avoid float exponents)
 modes = []
 for x in range(1, 6):  
@@ -86,7 +93,7 @@ print("\nMode functions:")
 for i, prime in enumerate(modes, 1):
     print(f"Mode {i} function: {prime}")
 
-# Finding the derivatives of the first 6 modes
+# Finding the derivatives of the first 5 modes
 modePrimes = []
 for mode in modes:
     modePrimes.append(sp.diff(mode, eta))
@@ -100,11 +107,38 @@ print("\nTest mode 1")
 test_ss = float(SS(modes[0], modes[0], GJ1, GJ2, eta, s).evalf())
 test_as = float(AS(modes[0], modes[0], eta, s))  # AS already returns float after our previous modification
 
-print("SS value:", test_ss)
-print("AS value:", test_as)
+print("SS value for Mode 1:", test_ss)
+print("AS value for Mode 1:", test_as)
 mat_ss = np.array([[test_ss]])
 mat_as = np.array([[test_as]])
 
 # Calculate just the eigenvalues using numerical values
 eigenvalues = la.eigvals(mat_ss, mat_as)  # Note the negative sign before test_as
-print("\nEigenvalues:", eigenvalues)
+print("\nDynamic Pressure Mode 1:", eigenvalues)
+
+for n in range(5):
+    # Create empty stiffness matrices
+    E = np.zeros((n+1, n+1))
+    K = np.zeros((n+1, n+1))
+    
+    for i in range(n+1):      # FIXED: was range(n)
+        for j in range(n+1):  # FIXED: was range(n)
+            E[i, j] = float(SS(modes[i], modes[j], GJ1, GJ2, eta, s).evalf())
+            K[i, j] = float(AS(modes[i], modes[j], eta, s))
+            
+    # Calculate divergence dynamic pressure
+    eigenvalues = la.eigvals(E, K)
+    real_parts = eigenvalues.real
+    qd[n] = np.min(real_parts)
+    
+    # Check if error is less than 0.1% to stop early
+    if n > 0:
+        err = error(qd[n-1], qd[n])
+        if abs(err) < 0.1:
+            print(f"\nConverged at mode count {n+1} with dynamic pressure: {qd[n]}")  # FIXED: was qd(n)
+            break
+
+# Print final dynamic pressures for each mode count
+print("\nFinal Dynamic Pressures for each mode count:\n")
+for i in range(n+1):
+    print(f"Mode count {i+1}: {qd[i]}\n")  # FIXED: more informative output
