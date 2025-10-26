@@ -15,11 +15,11 @@ CONSTANTS
 Global variables, can be edited per question part
 """
 y = sp.Symbol('y')
-s = sp.Symbol('s')
+eta = sp.Symbol('eta')
 k = 0
 c1 = 0.3 # m
 c2 = 0.4 # m
-s_val = 2 # m - numerical value of span
+s = 2 # m - numerical value of span
 GJ1 = 8500 # Nm^2/rad
 GJ2 = 7500 # Nm^2/rad
 
@@ -40,44 +40,35 @@ FUNCTIONS
 --------------------------------------------------
 """
 
-def eta(y, s):
-    return(y/s)
-
 # chord length variation along span
-def c(y, s, cr, ct): 
-    return cr - (cr - ct)*eta(y,s)
+def c(eta, cr, ct): 
+    return cr - (cr - ct)*eta
 
 # distance from elastic axis to aerodynamic center
-def ec(y, s, c1, cr, ct): 
-    chord = c(y, s, cr, ct)
-    return chord - c1 * 0.25*chord
+def ec(eta, c1, cr, ct): 
+    chord = c(eta, cr, ct)
+    return chord - c1 - 0.25*chord
 
 # lift curve slope
-def CLa(y, s): 
-    return 2*sp.pi*sp.sqrt(1 - (eta(y,s))**2)
+def CLa(eta): 
+    return 2*math.pi*sp.sqrt(1 - eta**2)
     
 # use assumed mode method with as many modes as required in series 1=y, 2=2y^2, 3=3y^3...
-def nextmode(n, y):
-    return n*y**n
+def nextmode(n, eta):
+    return n*eta**n
 
-# Torsional stiffness variation along span
-def GJ(y, s):
-    eta_val = eta(y, s)
-    return sp.Piecewise(
-        (GJ1*(1 - 0.25*eta_val), eta_val <= 0.5),
-        (GJ2*(1 - 0.2*eta_val), eta_val > 0.5)
-    )
+def SS (modei, modej, GJ1, GJ2, eta, s): #structural stiffness
+    integrand1 = sp.integrate(GJ1*(1 - 0.25*eta)*sp.diff(modei)*sp.diff(modej),(eta, 0, 0.5))
+    integrand2 = sp.integrate(GJ2*(1 - 0.2*eta)*sp.diff(modei)*sp.diff(modej),(eta, 0.5, 1))
+    return (1/s)*(integrand1 + integrand2)
 
-def SS (modei, modej, y, s): #structural stiffness
-    GJ_val = GJ(y, s)
-    return sp.integrate(GJ_val*sp.diff(modei)*sp.diff(modej),(y, 0, s))
-
-def AS (modei, modej, y, s): #aerodynamic stiffness
+def AS (modei, modej, eta, s): #aerodynamic stiffness
     # Calculate all parameters inside the function
-    chord = c(y, s, cr, ct)
-    e = ec(y, s, c1, cr, ct)
-    cla = CLa(y, s)
-    return -1*sp.integrate(chord*e*cla*modei*modej,(y, 0, s))
+    chord = c(eta, cr, ct)
+    ecfun = ec(eta, c1, cr, ct)
+    cla = CLa(eta)
+    func = chord*ecfun*cla*modei*modej
+    return float(s*(sp.integrate(func,(eta, 0, 1))).evalf())
 
 def error(previous, new):
     return((previous-new)/new*100) # returns percentage error
@@ -88,7 +79,7 @@ Question a)
 # Finding the first 5 modes (use integer mode numbers to avoid float exponents)
 modes = []
 for x in range(1, 6):  
-    modes.append(nextmode(x, y))
+    modes.append(nextmode(x, eta))
 print(modes)
 
 print("\nMode functions:")
@@ -98,7 +89,7 @@ for i, prime in enumerate(modes, 1):
 # Finding the derivatives of the first 6 modes
 modePrimes = []
 for mode in modes:
-    modePrimes.append(sp.diff(mode, y))
+    modePrimes.append(sp.diff(mode, eta))
 
 print("\nMode derivatives:")
 for i, prime in enumerate(modePrimes, 1):
@@ -106,17 +97,14 @@ for i, prime in enumerate(modePrimes, 1):
 
 # Test mode 1
 print("\nTest mode 1")
-test_ss = SS(modes[0], modes[0], y, s)
-test_as = AS(modes[0], modes[0], y, s)
+test_ss = float(SS(modes[0], modes[0], GJ1, GJ2, eta, s).evalf())
+test_as = float(AS(modes[0], modes[0], eta, s))  # AS already returns float after our previous modification
 
-# Convert symbolic results to numeric by substituting s and evaluating
-ss_val = float(test_ss.subs(s, s_val).evalf())
-as_val = float(test_as.subs(s, s_val).evalf())
+print("SS value:", test_ss)
+print("AS value:", test_as)
+mat_ss = np.array([[test_ss]])
+mat_as = np.array([[test_as]])
 
-# build 1x1 numeric matrices
-E_num = np.array([[ss_val]], dtype=float)
-K_num = np.array([[as_val]], dtype=float)
-
-# MATLAB: eig(test_ss, -test_as) -> generalized eigenproblem A v = lambda B v with B = -test_as
-eigvals = la.eigvals(E_num, -K_num)
-print("Eigenvalues:", eigvals)
+# Calculate just the eigenvalues using numerical values
+eigenvalues = la.eigvals(mat_ss, mat_as)  # Note the negative sign before test_as
+print("\nEigenvalues:", eigenvalues)
