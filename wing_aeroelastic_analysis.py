@@ -8,6 +8,7 @@ import math
 import sympy as sp
 import numpy as np
 import scipy.linalg as la
+import matplotlib.pyplot as plt
 
 """
 CONSTANTS
@@ -80,8 +81,16 @@ Question a)
 # Max number of modes
 nmax = 5
 
-# Array to store dynamic pressures for each mode count
+# Array to store dynamic pressures and errors for each mode count
 qd = np.zeros(nmax)
+modeError = np.zeros(nmax)
+
+# Values at convergence
+qdconv = 0
+errconv = 0
+Kconv = []
+Econv = []
+Fconv = []
 
 # Finding the first 5 modes (use integer mode numbers to avoid float exponents)
 modes = []
@@ -103,7 +112,7 @@ for i, prime in enumerate(modePrimes, 1):
     print(f"Mode {i} derivative: {prime}")
 
 # Test mode 1
-print("\nTest mode 1")
+print("\nTest for Mode 1:")
 test_ss = float(SS(modes[0], modes[0], GJ1, GJ2, eta, s).evalf())
 test_as = float(AS(modes[0], modes[0], eta, s))  # AS already returns float after our previous modification
 
@@ -113,16 +122,17 @@ mat_ss = np.array([[test_ss]])
 mat_as = np.array([[test_as]])
 
 # Calculate just the eigenvalues using numerical values
-eigenvalues = la.eigvals(mat_ss, mat_as)  # Note the negative sign before test_as
-print("\nDynamic Pressure Mode 1:", eigenvalues)
+eigenvalues = (la.eigvals(mat_ss, mat_as)).real  # Note the negative sign before test_as
+print("Dynamic Pressure Mode 1:", eigenvalues)
 
+# Calculate the first 5 modes check for convergence
 for n in range(5):
     # Create empty stiffness matrices
     E = np.zeros((n+1, n+1))
     K = np.zeros((n+1, n+1))
     
-    for i in range(n+1):      # FIXED: was range(n)
-        for j in range(n+1):  # FIXED: was range(n)
+    for i in range(n+1):      
+        for j in range(n+1):  
             E[i, j] = float(SS(modes[i], modes[j], GJ1, GJ2, eta, s).evalf())
             K[i, j] = float(AS(modes[i], modes[j], eta, s))
             
@@ -133,12 +143,40 @@ for n in range(5):
     
     # Check if error is less than 0.1% to stop early
     if n > 0:
-        err = error(qd[n-1], qd[n])
-        if abs(err) < 0.1:
-            print(f"\nConverged at mode count {n+1} with dynamic pressure: {qd[n]}")  # FIXED: was qd(n)
+        modeError[n] = error(qd[n-1], qd[n])
+        if abs(modeError[n]) < 0.1:
+            print(f"\nConverged at mode count {n+1} with dynamic pressure: {qd[n]}")  
+            
+            # Save converged values
+            qdconv = qd[n]
+            errconv = modeError[n]
+            Kconv = K
+            Econv = E
+            
             break
 
 # Print final dynamic pressures for each mode count
-print("\nFinal Dynamic Pressures for each mode count:\n")
+print("Final Dynamic Pressures for each mode count:")
 for i in range(n+1):
-    print(f"Mode count {i+1}: {qd[i]}\n")  # FIXED: more informative output
+    print(f"Mode {i+1}: {qd[i]} | Error: {modeError[i]}%")
+    
+# Plot the convergence of dynamic pressure vs number of modes
+plt.figure(figsize=(10, 6))
+
+# Create array of mode counts
+mode_counts = np.arange(1, n+2)  # n+2 because n is 0-indexed and we want 1,2,3,4,5
+
+# Plot dynamic pressure vs modes
+plt.plot(mode_counts, qd[:n+1], 'bo-', linewidth=2, markersize=8, label='Divergence Dynamic Pressure')
+if qdconv != 0:
+    plt.axhline(y=qdconv, color='r', linestyle='--', linewidth=1.5, label=f'Converged value: {qdconv:.4f} Pa')
+
+plt.xlabel('Number of Modes', fontsize=12)
+plt.ylabel('Divergence Dynamic Pressure (Pa)', fontsize=12)
+plt.title('Divergence Dynamic Pressure vs Number of Modes', fontsize=14, fontweight='bold')
+plt.grid(True, alpha=0.3)
+plt.legend()
+plt.xticks(mode_counts)
+
+plt.tight_layout()
+plt.show()
