@@ -17,6 +17,7 @@ Global variables, can be edited per question part
 """
 y = sp.Symbol('y')
 eta = sp.Symbol('eta')
+k_sym = sp.Symbol('k')
 k = 0
 c1 = 0.3 # m
 c2 = 0.4 # m
@@ -33,8 +34,6 @@ BASELINE FORMULAS
 
 cr = c1 + c2 # Root chord length
 ct = 1.75*c1 # Tip chord length
-
-#alphaBar = 5-k*eta
 
 """
 FUNCTIONS
@@ -53,6 +52,9 @@ def ec(eta, c1, cr, ct):
 # lift curve slope
 def CLa(eta): 
     return 2*math.pi*sp.sqrt(1 - eta**2)
+
+def alphaBar(eta, k):
+    return 5 - k*eta
     
 # use assumed mode method with as many modes as required in series 1=y, 2=2y^2, 3=3y^3...
 def nextmode(n, eta):
@@ -69,7 +71,17 @@ def AS (modei, modej, eta, s): #aerodynamic stiffness
     ecfun = ec(eta, c1, cr, ct)
     cla = CLa(eta)
     func = chord*ecfun*cla*modei*modej
+    return float(-s*(sp.integrate(func,(eta, 0, 1))).evalf())
+
+def force (modei, c1, cr, ct, eta, s, alpha): #aerodynamic force
+    chord = c(eta, cr, ct)
+    ecfun = ec(eta, c1, cr, ct)
+    cla = CLa(eta)
+    func = chord*ecfun*cla*alpha*modei
     return float(s*(sp.integrate(func,(eta, 0, 1))).evalf())
+
+def thetaFunc(E, K, F, q):
+    return (np.linalg.solve(E + q*K, q*F))
 
 def error(previous, new):
     return((previous-new)/new*100) # returns percentage error
@@ -88,6 +100,7 @@ modeError = np.zeros(nmax)
 # Values at convergence
 qdconv = 0
 errconv = 0
+nConv = 0
 Kconv = []
 Econv = []
 Fconv = []
@@ -122,7 +135,7 @@ mat_ss = np.array([[test_ss]])
 mat_as = np.array([[test_as]])
 
 # Calculate just the eigenvalues using numerical values
-eigenvalues = (la.eigvals(mat_ss, mat_as)).real  # Note the negative sign before test_as
+eigenvalues = (la.eigvals(mat_ss, -mat_as)).real  # Note the negative sign before test_as
 print("Dynamic Pressure Mode 1:", eigenvalues)
 
 # Calculate the first 5 modes check for convergence
@@ -137,7 +150,7 @@ for n in range(5):
             K[i, j] = float(AS(modes[i], modes[j], eta, s))
             
     # Calculate divergence dynamic pressure
-    eigenvalues = la.eigvals(E, K)
+    eigenvalues = la.eigvals(E, -K)
     real_parts = eigenvalues.real
     qd[n] = np.min(real_parts)
     
@@ -150,6 +163,7 @@ for n in range(5):
             # Save converged values
             qdconv = qd[n]
             errconv = modeError[n]
+            nConv = n
             Kconv = K
             Econv = E
             
@@ -180,3 +194,32 @@ plt.xticks(mode_counts)
 
 plt.tight_layout()
 plt.show()
+
+'''
+Question b)
+'''
+# 50% of converged dynamic pressure
+qdHalf = qdconv / 2
+theta = 0
+alphaTip = 5 #deg
+eta_value = 1
+
+# Calculate the force matrix at the converged dynamic pressure
+F = np.zeros(nConv+1)
+for i in range(nConv+1):
+    F[i] = force (modes[i], c1, cr, ct, eta, s, alphaTip)
+
+# Calculating theta matrix
+theta_r = thetaFunc(Econv, Kconv, F, qdHalf)
+
+for i in range(nConv+1):
+    mode_at_eta = modes[i].subs(eta, eta_value)  # Substitute eta = eta_value
+    theta = theta + theta_r[i] * mode_at_eta
+
+# Solve for k
+k_solution = sp.solve(theta - k_sym*eta, k_sym)
+print(f"\nk = {k_solution[0]}")
+
+# Evaluate at tip
+k_value = float(k_solution[0].subs(eta, eta_value))
+print(f"\nk at eta=1: {k_value}")
